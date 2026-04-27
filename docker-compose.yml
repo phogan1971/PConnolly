@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dealerops-postgres
+    environment:
+      POSTGRES_USER: dealerops
+      POSTGRES_PASSWORD: dealerops
+      POSTGRES_DB: dealerops
+    ports:
+      - "5432:5432"
+    volumes:
+      - dealerops_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dealerops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dealerops_pg:
