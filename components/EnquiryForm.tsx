@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { LeadType } from "@prisma/client";
+
+const LeadType = {
+  ENQUIRY: "ENQUIRY",
+  TEST_DRIVE: "TEST_DRIVE",
+  FINANCE: "FINANCE",
+  TRADE_IN: "TRADE_IN",
+  CALL_BACK: "CALL_BACK",
+} as const;
 
 export default function EnquiryForm({ vehicleId, stockNumber }: { vehicleId: string; stockNumber: string }) {
   const [submitting, setSubmitting] = useState(false);

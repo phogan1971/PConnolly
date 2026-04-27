@@ -1,11 +1,11 @@
 "use client";
 
-import { MetricEventType } from "@prisma/client";
+type MetricEventType = "PAGE_VIEW" | "PHONE_CLICK" | "WHATSAPP_CLICK" | "ENQUIRY_SUBMIT" | "FINANCE_CLICK";
 
 type Props = {
   href: string;
   vehicleId: string;
-  eventType: keyof typeof MetricEventType;
+  eventType: MetricEventType;
   className?: string;
   children: React.ReactNode;
 };
