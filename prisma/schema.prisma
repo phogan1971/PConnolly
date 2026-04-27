@@ -1,0 +1,456 @@
+// DealerOps schema. See docs/03-database-schema.md for human reference.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------- Enums --------------------
+
+enum Role {
+  ADMIN
+  MANAGER
+  OFFICE
+  SALES
+  VIEWER
+}
+
+enum VehicleStatus {
+  DRAFT
+  IN_PREP
+  READY
+  PUBLISHED
+  RESERVED
+  SOLD
+  ARCHIVED
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  HYBRID
+  PHEV
+  EV
+  LPG
+  OTHER
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+  SEMI_AUTOMATIC
+}
+
+enum BodyType {
+  HATCHBACK
+  SALOON
+  ESTATE
+  SUV
+  MPV
+  COUPE
+  CONVERTIBLE
+  VAN
+  PICKUP
+  OTHER
+}
+
+enum ServiceHistory {
+  FULL
+  PARTIAL
+  NONE
+  UNKNOWN
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum MediaUploadStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum ChannelType {
+  OWN_WEBSITE
+  EXTERNAL_FEED
+  EXTERNAL_API
+  PARTNER
+}
+
+enum PublicationStatus {
+  NOT_READY
+  READY
+  QUEUED
+  PUBLISHED
+  FAILED
+  UNPUBLISHED
+  READY_FOR_CARZONE_EXPORT
+}
+
+enum LeadType {
+  ENQUIRY
+  FINANCE
+  TEST_DRIVE
+  TRADE_IN
+  CALL_BACK
+  WHATSAPP
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  APPOINTMENT_BOOKED
+  CLOSED_WON
+  CLOSED_LOST
+  SPAM
+}
+
+enum LeadActivityType {
+  NOTE
+  CALL
+  EMAIL
+  SMS
+  WHATSAPP
+  STATUS_CHANGE
+  TASK_CREATED
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+  // OVERDUE is computed from due_at + status
+}
+
+enum MetricEventType {
+  LIST_VIEW
+  DETAIL_VIEW
+  ENQUIRY
+  PHONE_CLICK
+  WHATSAPP_CLICK
+  FINANCE_CLICK
+  TEST_DRIVE_REQUEST
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  DEAD
+}
+
+// -------------------- Tables --------------------
+
+model Dealership {
+  id           String   @id @default(cuid())
+  name         String
+  tradingName  String?  @map("trading_name")
+  address      String
+  phone        String
+  email        String
+  websiteUrl   String?  @map("website_url")
+  vatNumber    String?  @map("vat_number")
+  openingHours Json?    @map("opening_hours")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  users        User[]
+  vehicles     Vehicle[]
+  leads        Lead[]
+  auditLogs    AuditLog[]
+
+  @@map("dealerships")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  dealershipId  String    @map("dealership_id")
+  name          String
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  passwordHash  String?   @map("password_hash")
+  role          Role      @default(VIEWER)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  dealership      Dealership      @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  assignedLeads   Lead[]          @relation("LeadAssignee")
+  leadActivities  LeadActivity[]
+  tasks           Task[]
+  priceHistory    PriceHistory[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model Vehicle {
+  id                       String          @id @default(cuid())
+  dealershipId             String          @map("dealership_id")
+  status                   VehicleStatus   @default(DRAFT)
+  stockNumber              String          @map("stock_number")
+  registration             String?
+  vin                      String?
+  slug                     String          @unique
+  make                     String
+  model                    String
+  variant                  String?
+  year                     Int
+  mileageKm                Int             @map("mileage_km")
+  fuelType                 FuelType        @map("fuel_type")
+  transmission             Transmission
+  bodyType                 BodyType        @map("body_type")
+  engineSizeCc             Int?            @map("engine_size_cc")
+  colour                   String?
+  doors                    Int?
+  seats                    Int?
+  previousOwners           Int?            @map("previous_owners")
+  nctExpiry                DateTime?       @map("nct_expiry") @db.Date
+  taxExpiry                DateTime?       @map("tax_expiry") @db.Date
+  serviceHistory           ServiceHistory? @map("service_history")
+  warrantyMonths           Int?            @map("warranty_months")
+  priceRetailCents         Int             @map("price_retail_cents")
+  priceWasCents            Int?            @map("price_was_cents")
+  vatIncluded              Boolean         @default(true) @map("vat_included")
+  financeAvailable         Boolean         @default(false) @map("finance_available")
+  monthlyPaymentFromCents  Int?            @map("monthly_payment_from_cents")
+  location                 String?
+  features                 Json            @default("[]")
+  descriptionShort         String?         @map("description_short")
+  descriptionLong          String?         @map("description_long")
+  internalNotes            String?         @map("internal_notes")
+  dateAcquired             DateTime?       @map("date_acquired") @db.Date
+  datePrepared             DateTime?       @map("date_prepared") @db.Date
+  datePublished            DateTime?       @map("date_published") @db.Date
+  dateSold                 DateTime?       @map("date_sold") @db.Date
+  createdAt                DateTime        @default(now()) @map("created_at")
+  updatedAt                DateTime        @updatedAt @map("updated_at")
+
+  dealership   Dealership                  @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  media        VehicleMedia[]
+  publications VehicleChannelPublication[]
+  leads        Lead[]
+  priceHistory PriceHistory[]
+  metricEvents VehicleMetricEvent[]
+  metricsDaily VehicleMetricsDaily[]
+  tasks        Task[]
+
+  @@unique([dealershipId, stockNumber])
+  @@index([dealershipId, status])
+  @@index([make, model])
+  @@index([priceRetailCents])
+  @@index([registration])
+  @@map("vehicles")
+}
+
+model VehicleMedia {
+  id           String            @id @default(cuid())
+  vehicleId    String            @map("vehicle_id")
+  url          String
+  type         MediaType         @default(IMAGE)
+  sortOrder    Int               @default(0) @map("sort_order")
+  caption      String?
+  altText      String?           @map("alt_text")
+  isPrimary    Boolean           @default(false) @map("is_primary")
+  uploadStatus MediaUploadStatus @default(READY) @map("upload_status")
+  width        Int?
+  height       Int?
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, sortOrder])
+  @@map("vehicle_media")
+}
+
+model Channel {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  name        String
+  type        ChannelType
+  isEnabled   Boolean     @default(true) @map("is_enabled")
+  configJson  Json        @default("{}") @map("config_json")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  publications VehicleChannelPublication[]
+  metricEvents VehicleMetricEvent[]
+  metricsDaily VehicleMetricsDaily[]
+
+  @@map("channels")
+}
+
+model VehicleChannelPublication {
+  id                   String            @id @default(cuid())
+  vehicleId            String            @map("vehicle_id")
+  channelId            String            @map("channel_id")
+  status               PublicationStatus @default(NOT_READY)
+  externalListingId    String?           @map("external_listing_id")
+  exportedPayloadJson  Json?             @map("exported_payload_json")
+  lastExportedAt       DateTime?         @map("last_exported_at")
+  lastPublishedAt      DateTime?         @map("last_published_at")
+  lastError            String?           @map("last_error")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, channelId])
+  @@index([channelId, status])
+  @@map("vehicle_channel_publications")
+}
+
+model Lead {
+  id                String     @id @default(cuid())
+  dealershipId      String     @map("dealership_id")
+  vehicleId         String?    @map("vehicle_id")
+  sourceChannel     String     @map("source_channel")
+  customerName      String     @map("customer_name")
+  email             String?
+  phone             String?
+  message           String?
+  leadType          LeadType   @default(ENQUIRY) @map("lead_type")
+  status            LeadStatus @default(NEW)
+  assignedToUserId  String?    @map("assigned_to_user_id")
+  consentMarketing  Boolean    @default(false) @map("consent_marketing")
+  ip                String?
+  userAgent         String?    @map("user_agent")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  dealership Dealership      @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicle    Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  assignedTo User?           @relation("LeadAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  activities LeadActivity[]
+  tasks      Task[]
+
+  @@index([dealershipId, status])
+  @@index([vehicleId])
+  @@index([assignedToUserId, status])
+  @@map("leads")
+}
+
+model LeadActivity {
+  id         String           @id @default(cuid())
+  leadId     String           @map("lead_id")
+  userId     String?          @map("user_id")
+  type       LeadActivityType
+  body       String?
+  metadata   Json?
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@map("lead_activities")
+}
+
+model Task {
+  id                String     @id @default(cuid())
+  leadId            String?    @map("lead_id")
+  vehicleId         String?    @map("vehicle_id")
+  assignedToUserId  String     @map("assigned_to_user_id")
+  title             String
+  dueAt             DateTime?  @map("due_at")
+  status            TaskStatus @default(OPEN)
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  vehicle    Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  assignedTo User     @relation(fields: [assignedToUserId], references: [id], onDelete: Cascade)
+
+  @@index([assignedToUserId, status])
+  @@index([dueAt])
+  @@map("tasks")
+}
+
+model PriceHistory {
+  id              String   @id @default(cuid())
+  vehicleId       String   @map("vehicle_id")
+  oldPriceCents   Int      @map("old_price_cents")
+  newPriceCents   Int      @map("new_price_cents")
+  changedByUserId String?  @map("changed_by_user_id")
+  reason          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, createdAt])
+  @@map("price_history")
+}
+
+model VehicleMetricEvent {
+  id        String          @id @default(cuid())
+  vehicleId String          @map("vehicle_id")
+  channelId String?         @map("channel_id")
+  eventType MetricEventType @map("event_type")
+  sessionId String?         @map("session_id")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  vehicle Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  channel Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("vehicle_metric_events")
+}
+
+model VehicleMetricsDaily {
+  id                  String   @id @default(cuid())
+  vehicleId           String   @map("vehicle_id")
+  channelId           String?  @map("channel_id")
+  date                DateTime @db.Date
+  views               Int      @default(0)
+  detailViews         Int      @default(0) @map("detail_views")
+  enquiries           Int      @default(0)
+  phoneClicks         Int      @default(0) @map("phone_clicks")
+  whatsappClicks      Int      @default(0) @map("whatsapp_clicks")
+  financeClicks       Int      @default(0) @map("finance_clicks")
+  testDriveRequests   Int      @default(0) @map("test_drive_requests")
+
+  vehicle Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  channel Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+
+  @@unique([vehicleId, channelId, date])
+  @@map("vehicle_metrics_daily")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  dealershipId  String   @map("dealership_id")
+  actorUserId   String?  @map("actor_user_id")
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  action        String
+  beforeJson    Json?    @map("before_json")
+  afterJson     Json?    @map("after_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  actor      User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([dealershipId, createdAt])
+  @@map("audit_logs")
+}
+
+model Job {
+  id        String    @id @default(cuid())
+  kind      String
+  payload   Json      @default("{}")
+  runAt     DateTime  @default(now()) @map("run_at")
+  attempts  Int       @default(0)
+  status    JobStatus @default(PENDING)
+  lastError String?   @map("last_error")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, runAt])
+  @@map("jobs")
+}
